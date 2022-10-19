@@ -46,9 +46,12 @@
     "webpack-merge": "^5.8.0"
   },
   "dependencies": {
+    "coa": "^2.0.2",
     "core-js": "^3.25.1",
     "file-loader": "^6.2.0",
+    "koa-body": "^5.0.0",
     "puppeteer": "^18.0.5",
-    "url-loader": "^4.1.1"
+    "url-loader": "^4.1.1",
+    "uuid": "^9.0.0"
   }
 }
