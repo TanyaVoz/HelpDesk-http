@@ -1,105 +1,141 @@
-const http = require('http');
-const Koa = require('koa');
-const koaBody = require('koa-body');
+const http = require("http");
+const Koa = require("koa");
+const koaBody = require("koa-body");
 const app = new Koa();
 
+class Ticket {
+  constructor(id, name, status, created) {
+    (this.id = id), // идентификатор (уникальный в пределах системы)
+      (this.name = name), // краткое описание
+      (this.status = status), // boolean - сделано или нет
+      (this.created = created); // дата создания (timestamp)
+  }
+}
 
-const tickets = [
-    {id: 1,
-     name: "установить программу",
-     description:"установить программу в к.654", 
-     created: "230222 9:10"
-    },
-    {id: 2,
-        name: "починить замок в к.12",
-        description:"починить замок в к.12", 
-        created: "230222 12:15"
-       }
-];
+class TicketFull {
+  constructor(id, name, description, status, created) {
+    (this.id = id), // идентификатор (уникальный в пределах системы)
+      (this.name = name), // краткое описание
+      (this.description = description), // полное описание
+      (this.status = status), // boolean - сделано или нет
+      (this.created = created); // дата создания (timestamp)
+  }
+}
 
-let newId = 4;
+//CORS
+app.use(async (ctx, next) => {
+  const origin = ctx.request.get("Origin");
+  if (!origin) {
+    return await next();
+  }
+  const headers = {
+    "Access-Control-Allow-Origin": "*",
+  };
+  if (ctx.request.method !== "OPTIONS") {
+    ctx.response.set({
+      ...headers,
+    });
+    try {
+      return await next();
+    } catch (e) {
+      e.headers = {
+        ...e.headers,
+        ...headers,
+      };
+      throw e;
+    }
+  }
 
-app.use(koaBody({
+  if (ctx.request.get("Access-Control-Request-Method")) {
+    ctx.response.set({
+      ...headers,
+      "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, PATCH",
+    });
+    if (ctx.request.get("Access-Control-Request-Headers")) {
+      ctx.response.set(
+        "Access-Control-Allow-Headers",
+        ctx.request.get("Access-Control-Allow-Request-Headers")
+      );
+    }
+    ctx.response.status = 204; // No content
+  }
+});
+
+app.use(
+  koaBody({
+    text: true,
     urlencoded: true,
     multipart: true,
-  }));
+    json: true,
+  })
+);
 
-  app.use(async (ctx, next) => {
-    const origin = ctx.request.get('Origin');
-    if (!origin) {
-      return await next();
-    }
-    const headers = { 'Access-Control-Allow-Origin': '*', };
-  
-    if (ctx.request.method !== 'OPTIONS') {
-      ctx.response.set({...headers});
-      try {
-        return await next();
-      } catch (e) {
-        e.headers = {...e.headers, ...headers};
-        throw e;
-      }
-    }
-  
-    if (ctx.request.get('Access-Control-Request-Method')) {
-      ctx.response.set({
-        ...headers,
-        'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, PATCH',
-      });
-  
-      if (ctx.request.get('Access-Control-Request-Headers')) {
-        ctx.response.set('Access-Control-Allow-Headers', ctx.request.get('Access-Control-Request-Headers'));
-      }
-      ctx.response.status = 204;
-    }
+function tickets() {
+  //отбор заявок
+  const arr = [];
+  ticketsFull.forEach((elem) => {
+    arr.push(new Ticket(elem.id, elem.name, elem.status, elem.created));
   });
+  return arr;
+}
 
-app.use(async ctx => {
-    ctx.response.body ='server response';
+function findTicket(id) {
+  // поиск заявки
+  const result = ticketsFull.find((ticket) => ticket.id === id);
+  return result;
+}
 
-    const method = ctx.request.query.method;
+app.use(async (ctx) => {
+  const params = new URLSearchParams(ctx.request.querystring);
+  const obj = { method: params.get("method"), id: params.get("id") };
+  const { method, id } = obj;
+  const { body } = ctx.request;
 
-    switch (method) {
-        case 'allTickets':
-            ctx.response.body = tickets;
-            return;
-        case 'ticketById':
-          const id = Number(ctx.request.query.id);
-          const ticket = tickets.find(elem => id === elem.id);
-          ctx.response.body = ticket;
-          return;
-        case 'createTicket':
-           if (ctx.request.query.id) {
-             const { name, description, time, status } = ctx.request.body;
-             const editId = Number(ctx.request.query.id);
-             tickets.forEach((elem) => {
-               if (editId === elem.id) {
-                 if (!name) {
-                   elem.status = status;
-                 } else {
-                  elem.name = name;
-                  elem.description = description;
-                  elem.time = time;
-                  elem.status = status;
-                 }  
-               }
-             });
-           } else {
-             tickets.push(Object.assign({id: newId}, ctx.request.body));
-             newId += 1;
-           }
-           ctx.response.body = true;
-           return;
-        case 'delTicketById':
-          const delid = Number(ctx.request.query.id);
-          const index = tickets.findIndex(elem => delid === elem.id);
-          tickets.splice(index, 1);
-          ctx.response.body = true;
-          return;
-        default:
-            ctx.response.status = 404;
-            return;
-    }
+  console.log("method:", method, "id:", id, "ctx", body);
+  switch (method) {
+    case "allTickets":
+      ctx.response.body = tickets();
+      return;
+    case "ticketById":
+      if (ctx.request.query.id) {
+        ctx.response.body = findTicket(+id);
+      }
+    case "createTicket":
+      const nextId = ticketsFull.length;
+      ticketsFull.push(
+        new TicketFull(
+          nextId,
+          body.title,
+          body.description,
+          false,
+          new Date().toString().slice(3, 21)
+        )
+      );
+      ctx.response.body = ticketsFull[nextId];
+      return;
+    case "editTicket":
+      const index = body.id;
+      ticketsFull[index].name = body.title;
+      ticketsFull[index].description = body.description;
+      ctx.response.body = ticketsFull[index];
+      return;
+    case "deleteTicket":
+      const ind = ticketsFull.findIndex((ticket) => +ticket.id === +id);
+      ctx.response.body = "del";
+      ticketsFull.splice(ind, 1);
+      return;
+    default:
+      ctx.response.status = 404;
+      return;
+  }
+});
+
+app.use(async (ctx) => {
+  console.log("request.query:", ctx.request.query);
+  console.log("request.body", ctx.request.body);
+  ctx.response.status = 204;
+
+  console.log(ctx.response);
 });
 
 const port = process.env.PORT || 7070;
